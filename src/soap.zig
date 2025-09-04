@@ -464,7 +464,7 @@ fn parseValue(
     value_string: []const u8,
 ) !void {
     const T = @typeInfo(@TypeOf(result)).pointer.child;
-    const ti = @typeInfo(T);
+    comptime var ti = @typeInfo(T);
 
     val_parse: switch (comptime ti) {
         .bool => {
@@ -474,13 +474,15 @@ fn parseValue(
                 result.* = false;
             } else return error.InvalidBoolean;
         },
-        .int => result.* = std.fmt.parseInt(T, value_string, 0),
-        .float => result.* = std.fmt.parseFloat(T, value_string),
+        .int => result.* = try std.fmt.parseInt(T, value_string, 0),
+        .float => result.* = try std.fmt.parseFloat(T, value_string),
         .@"enum" => result.* = std.meta.stringToEnum(value_string) orelse
             return error.InvalidEnum,
         .optional => |opt| {
             const child_ti = @typeInfo(opt.child);
-            break :val_parse child_ti;
+            @compileLog(@typeName(opt.child));
+            ti = child_ti;
+            break :val_parse;
         },
         .pointer => |pointer| {
             // Special case string types.
