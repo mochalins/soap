@@ -463,60 +463,70 @@ fn parseValue(
     allocator: std.mem.Allocator,
     value_string: []const u8,
 ) !void {
-    const T = @typeInfo(@TypeOf(result)).pointer.child;
+    comptime var T = @typeInfo(@TypeOf(result)).pointer.child;
     comptime var ti = @typeInfo(T);
-
-    val_parse: switch (comptime ti) {
-        .bool => {
-            if (std.mem.eql(u8, "true", value_string)) {
-                result.* = true;
-            } else if (std.mem.eql(u8, "false", value_string)) {
-                result.* = false;
-            } else return error.InvalidBoolean;
-        },
-        .int => result.* = try std.fmt.parseInt(T, value_string, 0),
-        .float => result.* = try std.fmt.parseFloat(T, value_string),
-        .@"enum" => result.* = std.meta.stringToEnum(value_string) orelse
-            return error.InvalidEnum,
-        .optional => |opt| {
-            const child_ti = @typeInfo(opt.child);
-            @compileLog(@typeName(opt.child));
-            ti = child_ti;
-            break :val_parse;
-        },
-        .pointer => |pointer| {
-            // Special case string types.
-            if (comptime T == []const u8) {
-                result.* = value_string;
+    inline while (true) {
+        T = val_parse: switch (ti) {
+            .bool => {
+                if (std.mem.eql(u8, "true", value_string)) {
+                    result.* = true;
+                } else if (std.mem.eql(u8, "false", value_string)) {
+                    result.* = false;
+                } else return error.InvalidBoolean;
                 return;
-            }
+            },
+            .int => {
+                result.* = try std.fmt.parseInt(T, value_string, 0);
+                return;
+            },
+            .float => {
+                result.* = try std.fmt.parseFloat(T, value_string);
+                return;
+            },
+            .@"enum" => {
+                result.* = std.meta.stringToEnum(T, value_string) orelse
+                    return error.InvalidEnum;
+                return;
+            },
+            .optional => |opt| {
+                const Child = opt.child;
+                break :val_parse Child;
+            },
+            .pointer => |pointer| {
+                // Special case string types.
+                if (comptime T == []const u8) {
+                    result.* = value_string;
+                    return;
+                }
 
-            if (comptime pointer.size != .slice) {
-                break :val_parse .void;
-            }
+                if (comptime pointer.size != .slice) {
+                    break :val_parse void;
+                }
 
-            // Only support non-nested slices (except when child is string).
-            const child_ti = @typeInfo(pointer.child);
-            if (comptime child_ti == .pointer and
-                child_ti.pointer.size == .slice and
-                pointer.child != []const u8)
-            {
-                @compileError("nested slice option types not supported");
-            }
+                // Only support non-nested slices (except when child is string).
+                const child_ti = @typeInfo(pointer.child);
+                if (comptime child_ti == .pointer and
+                    child_ti.pointer.size == .slice and
+                    pointer.child != []const u8)
+                {
+                    @compileError("nested slice option types not supported");
+                }
 
-            result.* = try allocator.realloc(result.*, result.len + 1);
-            return parseValue(
-                &result.*[result.len - 1],
-                allocator,
-                value_string,
-            );
-        },
-        else => {
-            @compileError(std.fmt.comptimePrint(
-                "option field type {s} unsupported",
-                .{@tagName(ti)},
-            ));
-        },
+                result.* = try allocator.realloc(result.*, result.len + 1);
+                return parseValue(
+                    &result.*[result.len - 1],
+                    allocator,
+                    value_string,
+                );
+            },
+            else => {
+                @compileError(std.fmt.comptimePrint(
+                    "option field type {s} unsupported",
+                    .{@tagName(@typeInfo(T))},
+                ));
+            },
+        };
+        ti = @typeInfo(T);
     }
 }
 
