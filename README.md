@@ -4,6 +4,11 @@
 
 > **S**tructured **O**ptions & **A**rguments **P**arser.
 
+** MOVED TO CODEBERG**
+
+This repository is no longer maintained. Instead, it has been moved to
+https://codeberg.org/mochalins/soup
+
 # TODO
 
 1. Recursive depth field match scanning for options maps
